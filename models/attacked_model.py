@@ -11,8 +11,8 @@ class AttackedModel(nn.Module):
         super(AttackedModel, self).__init__()
         self.activation = activation
         self.layers = nn.ModuleList([
-            nn.Linear(input_dim, hidden_layer_dim, bias=True, device=settings.device),
-            nn.Linear(hidden_layer_dim, output_dim, bias=False, device=settings.device)
+            nn.Linear(input_dim, hidden_layer_dim, bias=True),
+            nn.Linear(hidden_layer_dim, output_dim, bias=False)
         ])
 
     def forward(self, x):
