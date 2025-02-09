@@ -68,7 +68,7 @@ class RecNetwork(nn.Module):
         model.eval()
         # Define regularization parameters
         # Calculate total loss with regularization parameters
-        return (kkt_loss(model(self.x).squeeze(), self.y, self.l) * rec_loss_reg +
+        return (kkt_loss(self.x, self.y, self.l) * rec_loss_reg +
                 self.get_prior_loss() * prior_loss_reg +
                 self.get_lambda_loss() * lambda_loss_reg)
 

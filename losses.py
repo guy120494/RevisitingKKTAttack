@@ -11,7 +11,49 @@ class KKTLoss(nn.Module):
         super(KKTLoss, self).__init__()
         self.model = model
 
-    def forward(self, predictions, targets, lambdas, only_w=True):
+    def compute_loss_of_w(self, x, y, lambdas):
+        """
+        Compute the expression w_j - v_j * Σ (lambda_i * y_i * x_i * sigma_prime(w_j^T * x_i + b_j))
+
+        Parameters:
+            w (torch.Tensor): Tensor of shape (j, d) where j is the number of outputs and d is the feature dimension.
+            v (torch.Tensor): Tensor of shape (j,) for each output dimension.
+            x (torch.Tensor): Tensor of shape (n, d) where n is the number of samples.
+            lambdas (torch.Tensor): Tensor of shape (n,) containing the lambda coefficients.
+            y (torch.Tensor): Tensor of shape (n,) containing the y values.
+            b (torch.Tensor): Tensor of shape (j,) containing the biases.
+
+        Returns:
+            torch.Tensor: The result of the computation.
+        """
+        w = self.model.get_parameter("layers.0.weight")
+        b = self.model.get_parameter("layers.0.bias")
+        v = self.model.get_parameter("layers.1.weight")
+
+        # Compute w^T * x + b
+        wx_plus_b = torch.matmul(w, x.T) + b[:, None]  # shape (j, n)
+
+        # Derivative of ReLU, which is the Heaviside step function
+        sigma_prime = torch.heaviside(wx_plus_b, torch.tensor(0.0))
+
+        # Calculate lambda_i * y_i * x_i * sigma_prime(w_j^T * x_i + b_j)
+        # We multiply x (n, d) with sigma_prime (j, n) transposed to align dimensions
+        # y and lambda need to be broadcasted correctly
+        modified_x = x * lambdas[:, None] * y[:, None]  # element-wise multiplication and broadcasting lambdas and y along d
+
+        # Sum over all samples, resulting in shape (n, d), then we need to sum this for each j
+        weighted_sum = torch.einsum('nd,jn->jd', modified_x, sigma_prime)
+
+        # Compute v_j * summed term
+        term = v.T * weighted_sum  # broadcasting v over d
+
+        # Subtract from w
+        result = (w - term).pow(2).sum()
+
+        return result
+
+    def forward(self, x, targets, lambdas, only_w=True):
+        predictions = self.model(x).squeeze()
         assert lambdas.dim() == 1
         assert lambdas.shape == targets.shape
         assert predictions.dim() == 1
@@ -25,6 +67,8 @@ class KKTLoss(nn.Module):
         else:
             inputs = list(self.model.parameters())
         outputs = predictions * targets * lambdas
+
+        # self.compute_loss_of_w(x, targets, lambdas)
 
         grads = torch.autograd.grad(
             outputs=outputs,
