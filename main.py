@@ -94,60 +94,69 @@ if __name__ == '__main__':
     print(array_of_constraints)
 
     kkt_loss = KKTLoss(model)
-    loss_of_training_set = kkt_loss(model.eval()(real_points_x).squeeze(), real_points_y, lambda_rn.l).detach().cpu().numpy()
+    loss_of_training_set = kkt_loss(model.eval()(real_points_x).squeeze(), real_points_y,
+                                    lambda_rn.l).detach().cpu().numpy()
     print(f"KKT LOSS OF TRAINING SET IS {loss_of_training_set}")
 
-
     # PROJECTED GRADIENT DESCENT
-    print(f"Iterating over {2 ** math.prod(list(array_of_constraints.size()))} matrices")
-    number_of_exception = 0
-    for binary_matrix in tqdm(generate_binary_matrices(*list(array_of_constraints.size()))):
-
-        A, b = create_polyhedron_boundaries(model, binary_matrix)
-        rec_polyhedron_model = RecNetwork()
-        rec_polyhedron_model.l = lambda_rn.l.clone()
-        polyhedron_loss = rec_polyhedron_model.reconstruct_in_polyhedron(model, A, b)
-
-    # QUADRATIC PROGRAMMIING
     # print(f"Iterating over {2 ** math.prod(list(array_of_constraints.size()))} matrices")
     # number_of_exception = 0
     # for binary_matrix in tqdm(generate_binary_matrices(*list(array_of_constraints.size()))):
-    #
-    #     A = create_matrix(model, lambda_rn.l.clone().detach(), binary_matrix, real_points_y).detach().cpu().numpy()
-    #     x = cp.Variable(settings.num_samples * settings.input_dim)
-    #     list_of_w = model.state_dict()['layers.0.weight'].detach().cpu().numpy()
-    #     list_of_v = model.state_dict()['layers.1.weight'].detach().cpu().numpy()
-    #     list_of_b = model.state_dict()['layers.0.bias'].detach().cpu().numpy()
-    #     list_of_lambdas = lambda_rn.l.clone().detach().cpu().numpy()
-    #
-    #     constraints = []
-    #     for i in range(settings.num_samples):
-    #         point = [x[k] for k in range(i, settings.num_samples * settings.input_dim, settings.num_samples)]
-    #         for j in range(model.state_dict()['layers.0.weight'].size()[0]):
-    #             if binary_matrix[j, i] == 0:
-    #                 constraints.append(cp.vdot(list_of_w[j], point) + list_of_b[j] <= 0)
-    #             else:
-    #                 constraints.append(cp.vdot(list_of_w[j], point) + list_of_b[j] >= 0)
-    #
-    #     prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - list_of_w.reshape(-1))), constraints)
+    #     A, b = create_polyhedron_boundaries(model, binary_matrix)
+    #     rec_polyhedron_model = RecNetwork(train_loader)
+    #     rec_polyhedron_model.l = lambda_rn.l
     #     try:
-    #         prob_loss = prob.solve(solver='OSQP')
-    #     except cp.SolverError:
-    #         number_of_exception += 1
-    #         print(f'{number_of_exception} ERRORS')
+    #         polyhedron_loss = rec_polyhedron_model.reconstruct_in_polyhedron(model, A, b)
+    #     except ValueError:
     #         continue
-    #     if prob.status == cp.OPTIMAL:
-    #         print(f"\n BINARY MATRIX: \n {binary_matrix}")
-    #         points = []
-    #         for i in range(settings.num_samples):
-    #             points.append([x[k].value for k in range(i, settings.num_samples * settings.input_dim, settings.num_samples)])
-    #         points = torch.tensor(points, device=settings.device).to(torch.float)
-    #         points_loss = kkt_loss(model.eval()(points).squeeze(), real_points_y,
-    #                                torch.tensor(list_of_lambdas, device=settings.device)).detach().cpu().numpy()
-    #         if not math.isclose(prob_loss, points_loss, abs_tol=10**-3):
-    #             print(f'PROB LOSS {prob_loss}')
-    #             print(f"POINTS LOSS {points_loss}")
+    #
+    #     print("A")
 
+    # QUADRATIC PROGRAMMIING
+    print(f"Iterating over {2 ** math.prod(list(array_of_constraints.size()))} matrices")
+    number_of_exception = 0
+    for binary_matrix in tqdm(generate_binary_matrices(*list(array_of_constraints.size()))):
+        binary_matrix = np.array(
+        [[0., 0., 0., 0.],
+        [0., 0., 1., 1.],
+        [1., 1., 1., 1.],
+        [0., 1., 1., 0.]]) #TODO: DELETE THIS VARIABLE
+        A = create_matrix_for_convex_optimization(model, lambda_rn.l.clone().detach(), binary_matrix,
+                                                  real_points_y).detach().cpu().numpy()
+        x = cp.Variable(settings.num_samples * settings.input_dim)
+        list_of_w = model.state_dict()['layers.0.weight'].detach().cpu().numpy()
+        list_of_v = model.state_dict()['layers.1.weight'].detach().cpu().numpy()
+        list_of_b = model.state_dict()['layers.0.bias'].detach().cpu().numpy()
+        list_of_lambdas = lambda_rn.l.clone().detach().cpu().numpy()
+
+        constraints = []
+        for i in range(settings.num_samples):
+            point = [x[k] for k in range(i, settings.num_samples * settings.input_dim, settings.num_samples)]
+            for j in range(model.state_dict()['layers.0.weight'].size()[0]):
+                if binary_matrix[j, i] == 0:
+                    constraints.append(cp.vdot(list_of_w[j], point) + list_of_b[j] <= 0)
+                else:
+                    constraints.append(cp.vdot(list_of_w[j], point) + list_of_b[j] >= 0)
+
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - list_of_w.flatten())), constraints)
+        try:
+            prob_loss = prob.solve(solver='CLARABEL')
+        except cp.SolverError:
+            number_of_exception += 1
+            print(f'{number_of_exception} ERRORS')
+            continue
+        if prob.status == cp.OPTIMAL:
+            print(f"\n BINARY MATRIX: \n {binary_matrix}")
+            points = []
+            for i in range(settings.num_samples):
+                points.append(
+                    [x[k].value for k in range(i, settings.num_samples * settings.input_dim, settings.num_samples)])
+            points = torch.tensor(points, device=settings.device).to(torch.float)
+            points_loss = kkt_loss(model.eval()(points).squeeze(), real_points_y,
+                                   torch.tensor(list_of_lambdas, device=settings.device)).detach().cpu().numpy()
+            if not math.isclose(prob_loss, points_loss, abs_tol=10 ** -3):
+                print(f'PROB LOSS {prob_loss}')
+                print(f"POINTS LOSS {points_loss}")
 
     # MINIMUM NORM SOLUTION
 
@@ -167,8 +176,4 @@ if __name__ == '__main__':
     #     if all(constraints):
     #         print(f"\n {binary_matrix} \n")
 
-
-
-
     # rn.reconstruction(model.eval())
-
