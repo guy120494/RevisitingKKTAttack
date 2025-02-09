@@ -78,8 +78,8 @@ class RecNetwork(nn.Module):
         kkt_loss = KKTLoss(model)
         opt_x = ProjectedGradientOptimizer([self.x], lr=0.01, A=A, b=b)
 
-        self.evaluate_extraction(self.x.clone().detach().to(settings.device), self.y.clone().detach(),
-                                 self.real_points_x.clone().detach(), self.real_points_y.clone().detach())
+        # self.evaluate_extraction(self.x.clone().detach().to(settings.device), self.y.clone().detach(),
+        #                          self.real_points_x.clone().detach(), self.real_points_y.clone().detach())
 
         for epoch in range(1001):
             opt_x.zero_grad()
