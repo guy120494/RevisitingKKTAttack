@@ -29,7 +29,8 @@ class KKTLoss(nn.Module):
         grads = torch.autograd.grad(
             outputs=outputs,
             inputs=inputs,
-            grad_outputs=torch.ones_like(outputs, requires_grad=False, device=settings.device).div(settings.num_samples),
+            grad_outputs=torch.ones_like(outputs, requires_grad=False, device=settings.device).div(
+                settings.num_samples),
             create_graph=True,
             retain_graph=True,
         )
@@ -60,6 +61,50 @@ class ProjectedGradientOptimizer(SGD):
         super().__init__(params, lr, momentum, dampening, weight_decay, nesterov)
         self.A = A
         self.b = b
+        if self.A is not None and self.b is not None:
+            for group in self.param_groups:
+                for param in group['params']:
+                    if param.requires_grad:
+                        param.copy_(self.initialize_interior(param.shape))
+
+    @torch.no_grad()
+    def initialize_interior(self, shape):
+        """
+        Initializes model parameters strictly inside the polyhedron defined by A @ x <= b.
+
+        Args:
+            shape (tuple): The desired shape of the parameter tensor.
+
+        Returns:
+            torch.Tensor: A tensor with values strictly inside the polyhedron.
+        """
+        num_variables = self.A.size(1)  # Number of variables (columns of A)
+
+        for _ in range(1000):  # Try up to 1000 attempts to find a valid interior point
+            # Generate a random point in the same dimension
+            random_vector = torch.randn(num_variables).to(settings.device)
+            x = random_vector / random_vector.norm()  # Normalize to unit sphere
+
+            # Scale down the random vector to ensure it's strictly inside the polyhedron
+            scale = float('inf')
+            for i in range(self.A.size(0)):  # Iterate over constraints
+                constraint = self.A[i]
+                margin = self.b[i] - constraint @ x
+                if margin > 0:
+                    scale = min(scale, margin / (constraint @ random_vector).abs().item())
+
+            if scale < float('inf'):
+                scale *= 0.9  # Reduce the scale slightly to ensure it's strictly inside
+                x = x * scale
+
+            # Check if the result satisfies A @ x < b
+            if torch.all(self.A @ x < self.b):
+                break
+        else:
+            raise ValueError("Failed to initialize within the polyhedron interior.")
+
+        # Reshape the parameter to the desired shape
+        return x.view(shape)
 
     @torch.no_grad()
     def project_to_polyhedron(self, param):
@@ -80,7 +125,7 @@ class ProjectedGradientOptimizer(SGD):
         # Minimize ||x - param||^2 subject to A @ x <= b
         x = param_flat.clone()
 
-        for _ in range(100):  # Max iterations
+        for _ in range(500):  # Max iterations
             violation = self.A @ x - self.b
             if torch.all(violation <= 1e-6):  # No violations
                 break
