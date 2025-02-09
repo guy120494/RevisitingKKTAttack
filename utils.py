@@ -107,7 +107,9 @@ def create_polyhedron_boundaries(model: AttackedModel, sigma_matrix):
                 a = -list_of_w[i].clone()
                 b = -list_of_b[i]
 
-            final_A.append(__create_block_matrix(a, settings.num_samples, settings.input_dim))
+            c = torch.zeros(1, settings.num_samples * settings.input_dim)
+            c[:, j:j + settings.input_dim] = a
+            final_A.append(c)
             final_b.append(b)
     final_A = torch.vstack(final_A).to(settings.device)
     final_b = torch.vstack(final_b).to(settings.device)
