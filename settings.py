@@ -29,7 +29,7 @@ global lr
 lr = 0.1
 
 global epochs
-epochs = 20000
+epochs = 200000
 
 global find_lambdas_epochs
 find_lambdas_epochs = 2000
