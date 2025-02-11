@@ -42,7 +42,7 @@ class RecNetwork(nn.Module):
             self.real_points_y = None
 
     def find_lambdas(self, model):
-        self.x = torch.nn.Parameter(self.real_points_x.clone(), requires_grad=True)
+        self.x = torch.nn.Parameter(self.real_points_x.clone(), requires_grad=False)
         opt_l = torch.optim.Adam([self.l], lr=0.1)
         kkt_loss = KKTLoss(model)
         for epoch in range(settings.find_lambdas_epochs):
