@@ -94,7 +94,7 @@ if __name__ == '__main__':
     print(array_of_constraints)
 
     kkt_loss = KKTLoss(model)
-    loss_of_training_set = kkt_loss(model.eval()(real_points_x).squeeze(), real_points_y,
+    loss_of_training_set = kkt_loss(real_points_x, real_points_y,
                                     lambda_rn.l).detach().cpu().numpy()
     print(f"KKT LOSS OF TRAINING SET IS {loss_of_training_set}")
 
@@ -152,7 +152,7 @@ if __name__ == '__main__':
                 points.append(
                     [x[k].value for k in range(i, settings.num_samples * settings.input_dim, settings.num_samples)])
             points = torch.tensor(points, device=settings.device).to(torch.float)
-            points_loss = kkt_loss(model.eval()(points).squeeze(), real_points_y,
+            points_loss = kkt_loss(points, real_points_y,
                                    torch.tensor(list_of_lambdas, device=settings.device)).detach().cpu().numpy()
             if not math.isclose(prob_loss, points_loss, abs_tol=10 ** -3):
                 print(f'PROB LOSS {prob_loss}')
