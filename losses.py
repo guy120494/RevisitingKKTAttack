@@ -34,7 +34,8 @@ class KKTLoss(nn.Module):
         wx_plus_b = torch.matmul(w, x.T) + b[:, None]  # shape (j, n)
 
         # Derivative of ReLU, which is the Heaviside step function
-        sigma_prime = torch.heaviside(wx_plus_b, torch.tensor(0.0))
+        # sigma_prime = torch.heaviside(wx_plus_b, torch.tensor(0.0))
+        sigma_prime = torch.sigmoid(100 * wx_plus_b)
 
         # Calculate lambda_i * y_i * x_i * sigma_prime(w_j^T * x_i + b_j)
         # We multiply x (n, d) with sigma_prime (j, n) transposed to align dimensions
@@ -68,23 +69,23 @@ class KKTLoss(nn.Module):
             inputs = list(self.model.parameters())
         outputs = predictions * targets * lambdas
 
-        # self.compute_loss_of_w(x, targets, lambdas)
+        return self.compute_loss_of_w(x, targets, lambdas)
 
-        grads = torch.autograd.grad(
-            outputs=outputs,
-            inputs=inputs,
-            grad_outputs=torch.ones_like(outputs, requires_grad=False, device=settings.device).div(
-                settings.num_samples),
-            create_graph=True,
-            retain_graph=True,
-        )
-
-        kkt_loss = 0
-        for _, (p, grad) in enumerate(zip(inputs, grads)):
-            assert p.shape == grad.shape
-            kkt_loss += (p.detach().data - grad).pow(2).sum()
-
-        return kkt_loss
+        # grads = torch.autograd.grad(
+        #     outputs=outputs,
+        #     inputs=inputs,
+        #     grad_outputs=torch.ones_like(outputs, requires_grad=False, device=settings.device).div(
+        #         settings.num_samples),
+        #     create_graph=True,
+        #     retain_graph=True,
+        # )
+        #
+        # kkt_loss = 0
+        # for _, (p, grad) in enumerate(zip(inputs, grads)):
+        #     assert p.shape == grad.shape
+        #     kkt_loss += (p.detach().data - grad).pow(2).sum()
+        #
+        # return kkt_loss
 
 
 class ProjectedGradientOptimizer(SGD):
